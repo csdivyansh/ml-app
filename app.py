@@ -1,5 +1,6 @@
 import os
 import joblib
+import re
 import pandas as pd
 import numpy as np
 from typing import List, Dict, Any
@@ -7,8 +8,13 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import warnings
+import logging
 
 warnings.filterwarnings('ignore')
+
+# Configure simple logging instead of print statements
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s: %(message)s")
+logger = logging.getLogger("ml_api")
 
 # Initialize FastAPI app
 app = FastAPI(title="AI Health ML API", version="1.0.0")
@@ -32,19 +38,33 @@ app.add_middleware(
 # Load the pre-trained model
 model = None
 model_loaded = False
+# Expect the artifact saved as a dict: {'mlb': MultiLabelBinarizer, 'le': LabelEncoder, 'clf': estimator}
+mlb = None
+le = None
+clf = None
 
 try:
     model_path = os.path.join(os.path.dirname(__file__), "disease_model.pkl")
     if os.path.exists(model_path):
         model = joblib.load(model_path)
-        model_loaded = True
-        print("✅ Disease model loaded successfully")
+        # Support both plain estimator and saved dict artifact
+        if isinstance(model, dict):
+            mlb = model.get('mlb')
+            le = model.get('le')
+            clf = model.get('clf')
+            model_loaded = clf is not None
+        else:
+            # legacy: model is an estimator
+            clf = model
+            model_loaded = True
+        logger.info("Disease model loaded successfully")
     else:
-        print(f"⚠️ Model file not found at {model_path}")
-        print("Please ensure disease_model.pkl is in the ml-api directory")
+        logger.warning("Model file not found at %s", model_path)
+        logger.warning("Please ensure disease_model.pkl is in the ml-api directory")
 except Exception as e:
-    print(f"❌ Error loading model: {e}")
+    logger.exception("Error loading model: %s", e)
     model = None
+    mlb = le = clf = None
 
 
 # Define request schema
@@ -99,42 +119,62 @@ async def predict_disease(input_data: SymptomInput):
                 detail="No symptoms provided. Please provide at least one symptom."
             )
         
-        # Convert symptoms list to DataFrame for model prediction
-        # Create a feature vector from symptoms
+        # Convert symptoms list to features using the saved MultiLabelBinarizer if present
         try:
-            features = prepare_features(input_data.symptoms)
-            
-            # Make prediction
-            prediction = model.predict([features])
-            predicted_disease = str(prediction[0])
-            
-            # Get confidence score if available
-            confidence = None
-            try:
-                if hasattr(model, 'predict_proba'):
-                    probabilities = model.predict_proba([features])
-                    confidence = float(np.max(probabilities))
-            except:
-                pass
-            
-            return PredictionResponse(
-                predicted_disease=predicted_disease,
-                confidence=confidence,
-                symptoms_input=input_data.symptoms,
-                success=True,
-                message="Prediction successful"
-            )
-            
+            if mlb is not None and clf is not None:
+                # normalize tokens similarly to training (lower/strip/underscores)
+                normalized = [normalize_token(s) for s in input_data.symptoms]
+                X = mlb.transform([normalized])
+                pred_idx = clf.predict(X)[0]
+                # if label encoder present, inverse transform
+                if le is not None:
+                    predicted_disease = str(le.inverse_transform([pred_idx])[0])
+                else:
+                    predicted_disease = str(pred_idx)
+
+                confidence = None
+                try:
+                    if hasattr(clf, 'predict_proba'):
+                        probs = clf.predict_proba(X)[0]
+                        confidence = float(probs.max())
+                except Exception:
+                    pass
+
+                return PredictionResponse(
+                    predicted_disease=predicted_disease,
+                    confidence=confidence,
+                    symptoms_input=input_data.symptoms,
+                    success=True,
+                    message="Prediction successful"
+                )
+            elif clf is not None:
+                # fallback: if only estimator saved, try previous prepare_features
+                features = prepare_features(input_data.symptoms)
+                prediction = clf.predict([features])
+                predicted_disease = str(prediction[0])
+                confidence = None
+                try:
+                    if hasattr(clf, 'predict_proba'):
+                        probabilities = clf.predict_proba([features])
+                        confidence = float(np.max(probabilities))
+                except:
+                    pass
+                return PredictionResponse(
+                    predicted_disease=predicted_disease,
+                    confidence=confidence,
+                    symptoms_input=input_data.symptoms,
+                    success=True,
+                    message="Prediction successful"
+                )
+            else:
+                raise HTTPException(status_code=503, detail="Model not available for prediction")
         except Exception as e:
-            raise HTTPException(
-                status_code=500,
-                detail=f"Prediction error: {str(e)}"
-            )
+            raise HTTPException(status_code=500, detail=f"Prediction error: {str(e)}")
     
     except HTTPException:
         raise
     except Exception as e:
-        print(f"❌ Prediction endpoint error: {e}")
+        logger.exception("Prediction endpoint error: %s", e)
         raise HTTPException(
             status_code=500,
             detail=f"Internal server error: {str(e)}"
@@ -175,6 +215,23 @@ def prepare_features(symptoms: List[str]) -> np.ndarray:
         print(f"Error preparing features: {e}")
         # Return a default feature vector if preparation fails
         return np.array([1.0] * len(symptoms))
+
+
+def normalize_token(tok: str) -> str:
+    """Normalize a symptom token to match training normalization.
+    Lowercase, strip whitespace, collapse spaces, convert spaces to underscores,
+    and remove stray punctuation around tokens.
+    """
+    if not tok:
+        return tok
+    t = str(tok).strip()
+    t = t.strip(' ,.')
+    t = t.lower()
+    t = re.sub(r"\s*_\s*", "_", t)
+    t = re.sub(r"\s+", " ", t)
+    t = t.replace(' ', '_')
+    t = re.sub(r"_+", "_", t)
+    return t
 
 
 # Batch prediction endpoint
@@ -251,28 +308,24 @@ async def root():
 @app.on_event("startup")
 async def startup_event():
     """Run on app startup"""
-    print("🚀 AI Health ML API Starting...")
+    logger.info("AI Health ML API starting")
     if model_loaded:
-        print("✅ Model loaded and ready for predictions")
+        logger.info("Model loaded and ready for predictions")
     else:
-        print("⚠️ Model not loaded - predictions will fail")
+        logger.warning("Model not loaded - predictions will fail")
 
 
 # Shutdown event
 @app.on_event("shutdown")
 async def shutdown_event():
     """Run on app shutdown"""
-    print("👋 AI Health ML API Shutting down...")
+    logger.info("AI Health ML API shutting down")
 
 
 if __name__ == "__main__":
     import uvicorn
     port = int(os.getenv("ML_API_PORT", 8000))
-    print(f"\n🌐 Starting ML API on http://localhost:{port}")
-    print(f"📚 API Docs available at http://localhost:{port}/docs\n")
-    uvicorn.run(
-        app,
-        host="0.0.0.0",
-        port=port,
-        reload=True
-    )
+    logger.info("Starting ML API on http://localhost:%d", port)
+    logger.info("API Docs available at http://localhost:%d/docs", port)
+    # Use import string so reload works correctly when requested
+    uvicorn.run("app:app", host="0.0.0.0", port=port, reload=True)

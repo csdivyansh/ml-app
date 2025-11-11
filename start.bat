@@ -41,5 +41,5 @@ echo Starting FastAPI server...
 echo API Docs: http://localhost:8000/docs
 echo Backend Root: http://localhost:8000
 echo.
-python app.py
-pause
+REM Start with uvicorn using import string so --reload works correctly
+python -m uvicorn app:app --host 0.0.0.0 --port 8000 --reload
