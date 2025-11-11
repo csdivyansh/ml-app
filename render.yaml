@@ -1,0 +1,35 @@
+# Render deployment config for AI Health ML API
+# https://docs.render.com/deploy-python
+
+services:
+  - type: web
+    name: ai-health-ml-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    port: 8000
+    healthCheckPath: /health
+    region: oregon # change to your preferred region
+
+    # Auto-deploy on push to main branch (configure branch in Render dashboard)
+    autoDeploy: true
+
+    # Environment variables (set these in Render dashboard)
+    envVars:
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: LOG_LEVEL
+        value: info
+      - key: ML_API_PORT
+        value: "8000"
+
+    # Scale settings
+    numInstances: 1
+    instanceType: starter # free tier; upgrade to standard/pro as needed
+
+    # Build settings
+    buildCommand: |
+      pip install --no-cache-dir -r requirements.txt
+      # Model and data are copied in Dockerfile
+
+    # Start command (overridden by Dockerfile CMD if not specified)
+    # startCommand: gunicorn -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000 app:app

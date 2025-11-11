@@ -1,0 +1,27 @@
+# Docker build context exclusions for ml-api
+
+venv/
+**pycache**/
+_.pyc
+_.pyo
+_.pyd
+.Python
+.pytest_cache/
+.venv
+env/
+.env
+.env.local
+.DS_Store
+_.egg-info/
+dist/
+build/
+.git/
+.gitignore
+.github/
+tests/
+.dockerignore
+Dockerfile
+docker-compose.yml
+\*.md
+.vscode/
+.idea/

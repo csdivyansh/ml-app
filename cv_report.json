@@ -1,0 +1,51 @@
+{
+  "n_samples": 4920,
+  "n_splits": 5,
+  "accuracy_mean": 1.0,
+  "accuracy_std": 0.0,
+  "precision_mean": 1.0,
+  "precision_std": 0.0,
+  "recall_mean": 1.0,
+  "recall_std": 0.0,
+  "f1_mean": 1.0,
+  "f1_std": 0.0,
+  "top3_mean": 1.0,
+  "top3_std": 0.0,
+  "per_fold": {
+    "fold_1": {
+      "acc": 1.0,
+      "prec": 1.0,
+      "rec": 1.0,
+      "f1": 1.0,
+      "top3": 1.0
+    },
+    "fold_2": {
+      "acc": 1.0,
+      "prec": 1.0,
+      "rec": 1.0,
+      "f1": 1.0,
+      "top3": 1.0
+    },
+    "fold_3": {
+      "acc": 1.0,
+      "prec": 1.0,
+      "rec": 1.0,
+      "f1": 1.0,
+      "top3": 1.0
+    },
+    "fold_4": {
+      "acc": 1.0,
+      "prec": 1.0,
+      "rec": 1.0,
+      "f1": 1.0,
+      "top3": 1.0
+    },
+    "fold_5": {
+      "acc": 1.0,
+      "prec": 1.0,
+      "rec": 1.0,
+      "f1": 1.0,
+      "top3": 1.0
+    }
+  }
+}
