@@ -8,6 +8,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import warnings
+import importlib
 import logging
 
 warnings.filterwarnings('ignore')
@@ -95,7 +96,7 @@ async def health_check():
 
 
 # Main prediction endpoint
-@app.post("/predict", response_model=PredictionResponse)
+@app.post("/predict")
 async def predict_disease(input_data: SymptomInput):
     """
     Predict disease based on symptoms
@@ -126,27 +127,102 @@ async def predict_disease(input_data: SymptomInput):
                 normalized = [normalize_token(s) for s in input_data.symptoms]
                 X = mlb.transform([normalized])
                 pred_idx = clf.predict(X)[0]
-                # if label encoder present, inverse transform
+                # build probabilities / top-k
+                probs = None
+                top_k_list = []
+                try:
+                    if hasattr(clf, 'predict_proba'):
+                        probs = clf.predict_proba(X)[0]
+                        # get class labels
+                        classes = None
+                        if le is not None:
+                            classes = list(le.inverse_transform(list(range(len(le.classes_)))))
+                        else:
+                            # try to get classes_ attribute
+                            try:
+                                classes = [str(c) for c in clf.classes_]
+                            except Exception:
+                                classes = None
+
+                        if classes is not None:
+                            # sort by probability descending
+                            idxs = list(reversed(np.argsort(probs)))
+                            for rank, i in enumerate(idxs[:5], start=1):
+                                label = str(classes[i])
+                                score = float(probs[i])
+                                # explain by listing overlapping symptoms
+                                matched = [t for t in normalized if t in (mlb.classes_.tolist() if hasattr(mlb, 'classes_') else [])]
+                                short_expl = f"Based on presence of: {', '.join(matched)}" if matched else "Based on symptom patterns in training data"
+                                top_k_list.append({
+                                    "rank": rank,
+                                    "text": label,
+                                    "score": round(score, 3),
+                                    "short_explanation": short_expl,
+                                })
+                except Exception:
+                    probs = None
+
+                # top-1 prediction and confidence
                 if le is not None:
-                    predicted_disease = str(le.inverse_transform([pred_idx])[0])
+                    try:
+                        predicted_disease = str(le.inverse_transform([pred_idx])[0])
+                    except Exception:
+                        predicted_disease = str(pred_idx)
                 else:
                     predicted_disease = str(pred_idx)
 
                 confidence = None
+                if probs is not None:
+                    confidence = float(probs.max())
+                else:
+                    # fallback: set confidence to None
+                    confidence = None
+
+                # urgency detection (simple rule-based)
+                urgency_score, urgency_level, urgency_reason, recommended_action = 0.0, "none", "No immediate danger detected", None
                 try:
-                    if hasattr(clf, 'predict_proba'):
-                        probs = clf.predict_proba(X)[0]
-                        confidence = float(probs.max())
+                    red_flags = {"loss_of_consciousness","unconscious","severe_headache","sudden","paralysis","weakness","chest_pain","shortness_of_breath","severe","fainting"}
+                    norm_set = set(normalized)
+                    intersect = norm_set.intersection(red_flags)
+                    if intersect:
+                        urgency_score = 0.95
+                        urgency_level = "critical"
+                        urgency_reason = f"Contains red-flag symptoms: {', '.join(intersect)}"
+                        recommended_action = "Seek immediate emergency medical care (call emergency services)."
+                    else:
+                        # moderate urgency if severe present in tokens
+                        if any(t for t in normalized if "severe" in t or "high" in t):
+                            urgency_score = 0.6
+                            urgency_level = "high"
+                            urgency_reason = "Symptoms indicate possible serious condition; clinical review advised"
+                            recommended_action = "Consult a clinician promptly"
                 except Exception:
                     pass
 
-                return PredictionResponse(
-                    predicted_disease=predicted_disease,
-                    confidence=confidence,
-                    symptoms_input=input_data.symptoms,
-                    success=True,
-                    message="Prediction successful"
-                )
+                overall_confidence = confidence
+
+                # compatibility fields for existing clients/tests
+                result = {
+                    "predicted_disease": predicted_disease,
+                    "confidence": overall_confidence,
+                    "symptoms_input": input_data.symptoms,
+                    "success": True,
+                    "message": "Prediction successful",
+                    # new structured output
+                    "top_k": top_k_list,
+                    "overall_confidence": overall_confidence,
+                    "confidence_calibration": "unknown",
+                    "urgency_flag": {
+                        "level": urgency_level,
+                        "score": round(float(urgency_score), 3),
+                        "reason": urgency_reason,
+                        "recommended_action": recommended_action,
+                    },
+                    "safety_actions": [],
+                    "model_id": getattr(clf, '__class__', str(type(clf))).__name__,
+                }
+
+                return result
             elif clf is not None:
                 # fallback: if only estimator saved, try previous prepare_features
                 features = prepare_features(input_data.symptoms)
@@ -320,6 +396,69 @@ async def startup_event():
 async def shutdown_event():
     """Run on app shutdown"""
     logger.info("AI Health ML API shutting down")
+
+
+# Explainability endpoint (optional - requires shap installed)
+@app.post("/explain")
+async def explain(input_data: SymptomInput):
+    """Return SHAP-like top contributing symptoms for the top prediction.
+    This endpoint requires the `shap` package to be installed in the environment.
+    """
+    try:
+        shap_spec = importlib.util.find_spec("shap")
+        if shap_spec is None:
+            raise HTTPException(status_code=501, detail="SHAP is not installed on the server")
+        # lazy import
+        import shap
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error importing shap: {e}")
+
+    if not model_loaded or mlb is None or clf is None:
+        raise HTTPException(status_code=503, detail="Model not loaded")
+
+    try:
+        normalized = [normalize_token(s) for s in input_data.symptoms]
+        X = mlb.transform([normalized])
+
+        # Choose explainer for linear models
+        try:
+            if hasattr(clf, 'coef_'):
+                explainer = shap.LinearExplainer(clf, mlb.transform([[]]), feature_dependence="independent")
+            else:
+                explainer = shap.Explainer(clf.predict_proba, mlb.transform([[]]))
+        except Exception:
+            explainer = shap.KernelExplainer(clf.predict_proba, mlb.transform([[]]))
+
+        sv = explainer.shap_values(X)
+        if isinstance(sv, list):
+            probs = clf.predict_proba(X)[0]
+            top_class = int(np.argmax(probs))
+            vals = sv[top_class][0]
+        else:
+            vals = sv[0]
+
+        feature_names = list(getattr(mlb, 'classes_', []))
+        if not feature_names:
+            feature_names = [f'feature_{i}' for i in range(len(vals))]
+
+        pairs = list(zip(feature_names, vals))
+        pairs_sorted = sorted(pairs, key=lambda x: abs(x[1]), reverse=True)
+        top = []
+        for name, val in pairs_sorted[:10]:
+            top.append({
+                'feature': name,
+                'shap_value': float(val),
+                'direction': 'positive' if val > 0 else 'negative'
+            })
+
+        return {
+            'input_symptoms': input_data.symptoms,
+            'top_features': top
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 if __name__ == "__main__":

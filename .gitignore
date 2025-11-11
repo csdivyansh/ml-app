@@ -10,7 +10,6 @@ ENV/
 .env
 .env.local
 .env.*.local
-*.pkl
 *.pth
 *.h5
 .DS_Store
