@@ -1,0 +1,131 @@
+{
+  "ml_api": {
+    "name": "AI Health ML API",
+    "description": "FastAPI service for disease prediction",
+    "version": "1.0.0",
+    "language": "Python",
+    "framework": "FastAPI",
+    "port": 8000,
+    "host": "0.0.0.0",
+    "endpoints": {
+      "health": {
+        "method": "GET",
+        "path": "/health",
+        "description": "Health check and model status"
+      },
+      "predict": {
+        "method": "POST",
+        "path": "/predict",
+        "description": "Single disease prediction",
+        "body": {
+          "symptoms": ["string"],
+          "metadata": {}
+        }
+      },
+      "predict_batch": {
+        "method": "POST",
+        "path": "/predict-batch",
+        "description": "Batch disease predictions",
+        "body": [
+          {
+            "symptoms": ["string"],
+            "metadata": {}
+          }
+        ]
+      },
+      "docs": {
+        "method": "GET",
+        "path": "/docs",
+        "description": "Interactive API documentation (Swagger UI)"
+      },
+      "redoc": {
+        "method": "GET",
+        "path": "/redoc",
+        "description": "ReDoc documentation"
+      }
+    }
+  },
+  "backend_integration": {
+    "name": "AI Health Backend",
+    "description": "Node.js Express server with ML proxy routes",
+    "language": "JavaScript",
+    "framework": "Express",
+    "port": 5000,
+    "routes": {
+      "disease_predict": {
+        "method": "POST",
+        "path": "/api/ml/disease-predict",
+        "authentication": "Required (Bearer token)",
+        "description": "Proxy to ML API predict endpoint"
+      },
+      "batch_predict": {
+        "method": "POST",
+        "path": "/api/ml/batch-predict",
+        "authentication": "Required",
+        "description": "Batch prediction proxy"
+      },
+      "health": {
+        "method": "GET",
+        "path": "/api/ml/health",
+        "description": "ML API health status"
+      }
+    }
+  },
+  "frontend": {
+    "name": "AI Health Frontend",
+    "description": "React application",
+    "language": "TypeScript",
+    "framework": "React",
+    "port": 5173
+  },
+  "installation": {
+    "step_1": "Place disease_model.pkl in ml-api/ folder",
+    "step_2_windows": "Run: cd ml-api && start.bat",
+    "step_2_unix": "Run: cd ml-api && bash start.sh",
+    "step_2_manual": [
+      "cd ml-api",
+      "python -m venv venv",
+      "source venv/bin/activate",
+      "pip install -r requirements.txt",
+      "python app.py"
+    ]
+  },
+  "environment_variables": {
+    "ml_api": {
+      "ML_API_PORT": "8000",
+      "FRONTEND_URL": "http://localhost:5173",
+      "DEBUG": "True"
+    },
+    "backend": {
+      "ML_API_URL": "http://localhost:8000"
+    }
+  },
+  "services": [
+    {
+      "name": "ML API",
+      "url": "http://localhost:8000",
+      "docs": "http://localhost:8000/docs",
+      "health": "http://localhost:8000/health"
+    },
+    {
+      "name": "Backend",
+      "url": "http://localhost:5000",
+      "health": "http://localhost:5000/"
+    },
+    {
+      "name": "Frontend",
+      "url": "http://localhost:5173"
+    }
+  ],
+  "features": [
+    "Disease prediction from symptoms",
+    "Confidence scoring",
+    "Batch predictions",
+    "CORS enabled",
+    "Authentication integration",
+    "Error handling",
+    "Interactive API documentation",
+    "Health monitoring",
+    "Production-ready structure"
+  ]
+}
