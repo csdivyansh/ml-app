@@ -1,0 +1,21 @@
+{
+  "total_diseases": 41,
+  "total_samples": 4920,
+  "total_unique_symptoms": 131,
+  "avg_symptoms_per_disease": 7.4487804878048784,
+  "min_samples_per_disease": 120,
+  "max_samples_per_disease": 120,
+  "diseases_with_1_sample": 0,
+  "top_diseases": {
+    "Fungal infection": 120,
+    "Allergy": 120,
+    "GERD": 120,
+    "Chronic cholestasis": 120,
+    "Drug Reaction": 120,
+    "Peptic ulcer diseae": 120,
+    "AIDS": 120,
+    "Diabetes ": 120,
+    "Gastroenteritis": 120,
+    "Bronchial Asthma": 120
+  }
+}

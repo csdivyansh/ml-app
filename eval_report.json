@@ -1,272 +1,292 @@
 {
-  "n_samples": 4920,
-  "accuracy": 1.0,
-  "precision_macro": 1.0,
-  "recall_macro": 1.0,
-  "f1_macro": 1.0,
-  "precision_micro": 1.0,
-  "recall_micro": 1.0,
-  "f1_micro": 1.0,
+  "n_samples_total": 4920,
+  "n_test_samples": 984,
+  "test_set_metrics": {
+    "accuracy": 1.0,
+    "precision_macro": 1.0,
+    "precision_weighted": 1.0,
+    "recall_macro": 1.0,
+    "recall_weighted": 1.0,
+    "f1_macro": 1.0,
+    "f1_weighted": 1.0,
+    "top_5_accuracy": 1.0
+  },
+  "cross_validation_metrics": {
+    "accuracy_mean": 1.0,
+    "accuracy_std": 0.0,
+    "precision_mean": 1.0,
+    "precision_std": 0.0,
+    "recall_mean": 1.0,
+    "recall_std": 0.0,
+    "f1_mean": 1.0,
+    "f1_std": 0.0
+  },
+  "confidence_stats": {
+    "mean": 0.9920782520325203,
+    "median": 1.0,
+    "min": 0.605,
+    "max": 1.0,
+    "std": 0.041695822822520816
+  },
   "classification_report": {
     "(vertigo) Paroymsal  Positional Vertigo": {
       "precision": 1.0,
       "recall": 1.0,
       "f1-score": 1.0,
-      "support": 120.0
+      "support": 24.0
     },
     "AIDS": {
       "precision": 1.0,
       "recall": 1.0,
       "f1-score": 1.0,
-      "support": 120.0
+      "support": 24.0
     },
     "Acne": {
       "precision": 1.0,
       "recall": 1.0,
       "f1-score": 1.0,
-      "support": 120.0
+      "support": 24.0
     },
     "Alcoholic hepatitis": {
       "precision": 1.0,
       "recall": 1.0,
       "f1-score": 1.0,
-      "support": 120.0
+      "support": 24.0
     },
     "Allergy": {
       "precision": 1.0,
       "recall": 1.0,
       "f1-score": 1.0,
-      "support": 120.0
+      "support": 24.0
     },
     "Arthritis": {
       "precision": 1.0,
       "recall": 1.0,
       "f1-score": 1.0,
-      "support": 120.0
+      "support": 24.0
     },
     "Bronchial Asthma": {
       "precision": 1.0,
       "recall": 1.0,
       "f1-score": 1.0,
-      "support": 120.0
+      "support": 24.0
     },
     "Cervical spondylosis": {
       "precision": 1.0,
       "recall": 1.0,
       "f1-score": 1.0,
-      "support": 120.0
+      "support": 24.0
     },
     "Chicken pox": {
       "precision": 1.0,
       "recall": 1.0,
       "f1-score": 1.0,
-      "support": 120.0
+      "support": 24.0
     },
     "Chronic cholestasis": {
       "precision": 1.0,
       "recall": 1.0,
       "f1-score": 1.0,
-      "support": 120.0
+      "support": 24.0
     },
     "Common Cold": {
       "precision": 1.0,
       "recall": 1.0,
       "f1-score": 1.0,
-      "support": 120.0
+      "support": 24.0
     },
     "Dengue": {
       "precision": 1.0,
       "recall": 1.0,
       "f1-score": 1.0,
-      "support": 120.0
+      "support": 24.0
     },
-    "Diabetes": {
+    "Diabetes ": {
       "precision": 1.0,
       "recall": 1.0,
       "f1-score": 1.0,
-      "support": 120.0
+      "support": 24.0
     },
     "Dimorphic hemmorhoids(piles)": {
       "precision": 1.0,
       "recall": 1.0,
       "f1-score": 1.0,
-      "support": 120.0
+      "support": 24.0
     },
     "Drug Reaction": {
       "precision": 1.0,
       "recall": 1.0,
       "f1-score": 1.0,
-      "support": 120.0
+      "support": 24.0
     },
     "Fungal infection": {
       "precision": 1.0,
       "recall": 1.0,
       "f1-score": 1.0,
-      "support": 120.0
+      "support": 24.0
     },
     "GERD": {
       "precision": 1.0,
       "recall": 1.0,
       "f1-score": 1.0,
-      "support": 120.0
+      "support": 24.0
     },
     "Gastroenteritis": {
       "precision": 1.0,
       "recall": 1.0,
       "f1-score": 1.0,
-      "support": 120.0
+      "support": 24.0
     },
     "Heart attack": {
       "precision": 1.0,
       "recall": 1.0,
       "f1-score": 1.0,
-      "support": 120.0
+      "support": 24.0
     },
     "Hepatitis B": {
       "precision": 1.0,
       "recall": 1.0,
       "f1-score": 1.0,
-      "support": 120.0
+      "support": 24.0
     },
     "Hepatitis C": {
       "precision": 1.0,
       "recall": 1.0,
       "f1-score": 1.0,
-      "support": 120.0
+      "support": 24.0
     },
     "Hepatitis D": {
       "precision": 1.0,
       "recall": 1.0,
       "f1-score": 1.0,
-      "support": 120.0
+      "support": 24.0
     },
     "Hepatitis E": {
       "precision": 1.0,
       "recall": 1.0,
       "f1-score": 1.0,
-      "support": 120.0
+      "support": 24.0
     },
-    "Hypertension": {
+    "Hypertension ": {
       "precision": 1.0,
       "recall": 1.0,
       "f1-score": 1.0,
-      "support": 120.0
+      "support": 24.0
     },
     "Hyperthyroidism": {
       "precision": 1.0,
       "recall": 1.0,
       "f1-score": 1.0,
-      "support": 120.0
+      "support": 24.0
     },
     "Hypoglycemia": {
       "precision": 1.0,
       "recall": 1.0,
       "f1-score": 1.0,
-      "support": 120.0
+      "support": 24.0
     },
     "Hypothyroidism": {
       "precision": 1.0,
       "recall": 1.0,
       "f1-score": 1.0,
-      "support": 120.0
+      "support": 24.0
     },
     "Impetigo": {
       "precision": 1.0,
       "recall": 1.0,
       "f1-score": 1.0,
-      "support": 120.0
+      "support": 24.0
     },
     "Jaundice": {
       "precision": 1.0,
       "recall": 1.0,
       "f1-score": 1.0,
-      "support": 120.0
+      "support": 24.0
     },
     "Malaria": {
       "precision": 1.0,
       "recall": 1.0,
       "f1-score": 1.0,
-      "support": 120.0
+      "support": 24.0
     },
     "Migraine": {
       "precision": 1.0,
       "recall": 1.0,
       "f1-score": 1.0,
-      "support": 120.0
+      "support": 24.0
     },
     "Osteoarthristis": {
       "precision": 1.0,
       "recall": 1.0,
       "f1-score": 1.0,
-      "support": 120.0
+      "support": 24.0
     },
     "Paralysis (brain hemorrhage)": {
       "precision": 1.0,
       "recall": 1.0,
       "f1-score": 1.0,
-      "support": 120.0
+      "support": 24.0
     },
     "Peptic ulcer diseae": {
       "precision": 1.0,
       "recall": 1.0,
       "f1-score": 1.0,
-      "support": 120.0
+      "support": 24.0
     },
     "Pneumonia": {
       "precision": 1.0,
       "recall": 1.0,
       "f1-score": 1.0,
-      "support": 120.0
+      "support": 24.0
     },
     "Psoriasis": {
       "precision": 1.0,
       "recall": 1.0,
       "f1-score": 1.0,
-      "support": 120.0
+      "support": 24.0
     },
     "Tuberculosis": {
       "precision": 1.0,
       "recall": 1.0,
       "f1-score": 1.0,
-      "support": 120.0
+      "support": 24.0
     },
     "Typhoid": {
       "precision": 1.0,
       "recall": 1.0,
       "f1-score": 1.0,
-      "support": 120.0
+      "support": 24.0
     },
     "Urinary tract infection": {
       "precision": 1.0,
       "recall": 1.0,
       "f1-score": 1.0,
-      "support": 120.0
+      "support": 24.0
     },
     "Varicose veins": {
       "precision": 1.0,
       "recall": 1.0,
       "f1-score": 1.0,
-      "support": 120.0
+      "support": 24.0
     },
     "hepatitis A": {
       "precision": 1.0,
       "recall": 1.0,
       "f1-score": 1.0,
-      "support": 120.0
+      "support": 24.0
     },
     "accuracy": 1.0,
     "macro avg": {
       "precision": 1.0,
       "recall": 1.0,
       "f1-score": 1.0,
-      "support": 4920.0
+      "support": 984.0
     },
     "weighted avg": {
       "precision": 1.0,
       "recall": 1.0,
       "f1-score": 1.0,
-      "support": 4920.0
+      "support": 984.0
     }
-  },
-  "top_3_accuracy": 1.0
+  }
 }

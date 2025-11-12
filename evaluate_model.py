@@ -3,7 +3,25 @@ import json
 import joblib
 import numpy as np
 import pandas as pd
-from sklearn.metrics import accuracy_score, classification_report, precision_recall_fscore_support
+import re
+from sklearn.metrics import (
+    accuracy_score, classification_report, precision_recall_fscore_support,
+    confusion_matrix
+)
+from sklearn.model_selection import train_test_split, cross_val_score
+
+
+def normalize_token(tok):
+    """Normalize symptom token"""
+    if not tok or pd.isna(tok):
+        return ""
+    t = str(tok).strip().lower()
+    t = t.strip(' ,.')
+    t = re.sub(r"\s*_\s*", "_", t)
+    t = re.sub(r"\s+", " ", t)
+    t = t.replace(' ', '_')
+    t = re.sub(r"_+", "_", t)
+    return t
 
 
 def load_model(path):
@@ -11,163 +29,212 @@ def load_model(path):
         raise FileNotFoundError(f"Model file not found: {path}")
     model = joblib.load(path)
     if isinstance(model, dict):
+        # New format with RandomForest
+        rf_model = model.get("model")
+        le = model.get("le")
+        all_symptoms = model.get("all_symptoms", [])
+        return rf_model, le, all_symptoms
+    else:
+        # Old format
         mlb = model.get("mlb")
         le = model.get("le")
         clf = model.get("clf")
-    else:
-        mlb = le = None
-        clf = model
-    return mlb, le, clf
+        return clf, le, None
 
 
-def read_cleaned_dataset(path):
-    if not os.path.exists(path):
-        raise FileNotFoundError(f"Cleaned dataset not found: {path}")
-    df = pd.read_csv(path)
-    # expected columns: Disease, Symptoms (semicolon-separated)
-    # Accept different capitalizations
-    cols = {c.lower(): c for c in df.columns}
-    disease_col = cols.get("disease") or cols.get("diagnosis") or list(df.columns)[0]
-    # symptoms column might be 'Symptoms' or 'symptoms'
-    symptoms_col = cols.get("symptoms") or cols.get("symptom") or None
-    if symptoms_col is None:
-        # Try to find a column that contains a semicolon in many rows
-        for c in df.columns:
-            sample = df[c].astype(str).iloc[0:10].tolist()
-            if any(";" in s for s in sample):
-                symptoms_col = c
-                break
-    if symptoms_col is None:
-        raise ValueError("Could not find symptoms column in cleaned dataset")
-
-    # Parse symptoms into lists
-    def parse_sym(s):
-        if pd.isna(s):
-            return []
-        if isinstance(s, (list, tuple)):
-            return list(s)
-        s = str(s).strip()
-        # If already JSON-like list
-        if s.startswith("[") and s.endswith("]"):
-            try:
-                arr = json.loads(s)
-                return [str(x).strip() for x in arr if x]
-            except Exception:
-                pass
-        # split on semicolon or comma
-        if ";" in s:
-            parts = [p.strip() for p in s.split(";") if p.strip()]
-            return parts
-        if "," in s:
-            parts = [p.strip() for p in s.split(",") if p.strip()]
-            return parts
-        return [s] if s else []
-
-    df["_sym_list"] = df[symptoms_col].apply(parse_sym)
-    df = df[df["_sym_list"].map(len) > 0].reset_index(drop=True)
-    return df, disease_col, "_sym_list"
-
-
-def evaluate(model_path, cleaned_csv_path, out_json="eval_report.json", top_k=3):
-    mlb, le, clf = load_model(model_path)
-    df, disease_col, sym_col = read_cleaned_dataset(cleaned_csv_path)
-
-    # true labels as strings
-    y_true = df[disease_col].astype(str).tolist()
-
+def evaluate(model_path, dataset_csv_path, out_json="eval_report.json", top_k=3):
+    print("=" * 80)
+    print("MODEL EVALUATION: Accuracy, Precision, Recall, F1-Score")
+    print("=" * 80)
+    
+    # Load model
+    print("\n📦 Loading model...")
+    rf_model, le, all_symptoms = load_model(model_path)
+    print(f"✅ Model loaded successfully")
+    print(f"   - Model type: {type(rf_model).__name__}")
+    print(f"   - Features: {len(all_symptoms)}")
+    print(f"   - Classes: {len(le.classes_)}")
+    
+    # Load dataset
+    print("\n📊 Loading dataset...")
+    sym_df = pd.read_csv(dataset_csv_path)
+    print(f"✅ Dataset loaded: {sym_df.shape}")
+    
+    # Get symptom columns
+    symptom_cols = [col for col in sym_df.columns if col.startswith("Symptom")]
+    
+    # Normalize symptoms
+    for col in symptom_cols:
+        sym_df[col] = sym_df[col].apply(normalize_token)
+    
     # Build feature matrix
-    if mlb is not None:
-        X = mlb.transform(df[sym_col].tolist())
-    else:
-        # fallback: simple binary bag-of-symptom using union of all tokens
-        all_tokens = sorted({t for L in df[sym_col].tolist() for t in L})
-        tok_index = {t: i for i, t in enumerate(all_tokens)}
-        X = np.zeros((len(df), len(all_tokens)), dtype=int)
-        for i, L in enumerate(df[sym_col].tolist()):
-            for t in L:
-                if t in tok_index:
-                    X[i, tok_index[t]] = 1
-
-    # If label encoder available, transform y_true to indices for top-k checks
-    if le is not None:
-        try:
-            y_true_idx = le.transform(y_true)
-        except Exception:
-            # fit_transform might fail if unseen labels; map via dict
-            name_to_idx = {n: i for i, n in enumerate(le.classes_)}
-            y_true_idx = np.array([name_to_idx.get(n, -1) for n in y_true])
-    else:
-        y_true_idx = None
-
-    # Predictions
-    y_pred = clf.predict(X)
-    # Convert to strings if encoded
-    if le is not None and np.issubdtype(type(y_pred[0]), np.integer):
-        try:
-            y_pred_labels = le.inverse_transform(y_pred)
-        except Exception:
-            y_pred_labels = [str(p) for p in y_pred]
-    else:
-        y_pred_labels = [str(p) for p in y_pred]
-
-    # Metrics
-    acc = accuracy_score(y_true, y_pred_labels)
-    prec_macro, rec_macro, f1_macro, _ = precision_recall_fscore_support(y_true, y_pred_labels, average='macro', zero_division=0)
-    prec_micro, rec_micro, f1_micro, _ = precision_recall_fscore_support(y_true, y_pred_labels, average='micro', zero_division=0)
-
+    print("\n🔧 Building feature matrix...")
+    X = []
+    y = []
+    
+    for _, row in sym_df.iterrows():
+        symptoms = [row[col] for col in symptom_cols if row[col] and row[col] != ""]
+        # Binary encode
+        binary_vector = [1 if s in symptoms else 0 for s in all_symptoms]
+        X.append(binary_vector)
+        y.append(row['Disease'])
+    
+    X = np.array(X)
+    y_encoded = le.transform(y)
+    
+    print(f"✅ Feature matrix built: {X.shape}")
+    print(f"   - Samples: {len(X)}")
+    print(f"   - Features: {X.shape[1]}")
+    print(f"   - Feature density: {X.mean():.3f}")
+    
+    # Split data
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y_encoded, test_size=0.2, random_state=42, stratify=y_encoded
+    )
+    
+    print(f"\n📊 Train/Test Split:")
+    print(f"   - Train: {len(X_train)} samples")
+    print(f"   - Test: {len(X_test)} samples")
+    
+    # Make predictions
+    print("\n🔮 Making predictions on test set...")
+    y_pred = rf_model.predict(X_test)
+    y_pred_proba = rf_model.predict_proba(X_test)
+    
+    # Decode labels
+    y_test_labels = le.inverse_transform(y_test)
+    y_pred_labels = le.inverse_transform(y_pred)
+    
+    # Calculate metrics
+    print("\n" + "=" * 80)
+    print("EVALUATION METRICS")
+    print("=" * 80)
+    
+    acc = accuracy_score(y_test_labels, y_pred_labels)
+    prec_macro, rec_macro, f1_macro, _ = precision_recall_fscore_support(
+        y_test_labels, y_pred_labels, average='macro', zero_division=0
+    )
+    prec_weighted, rec_weighted, f1_weighted, _ = precision_recall_fscore_support(
+        y_test_labels, y_pred_labels, average='weighted', zero_division=0
+    )
+    
+    print(f"\n🎯 Overall Metrics (Test Set):")
+    print(f"   Accuracy:            {acc:.4f} ({acc*100:.2f}%)")
+    print(f"\n   Precision (Macro):   {prec_macro:.4f}")
+    print(f"   Precision (Weighted):{prec_weighted:.4f}")
+    print(f"\n   Recall (Macro):      {rec_macro:.4f}")
+    print(f"   Recall (Weighted):   {rec_weighted:.4f}")
+    print(f"\n   F1-Score (Macro):    {f1_macro:.4f}")
+    print(f"   F1-Score (Weighted): {f1_weighted:.4f}")
+    
+    # Top-K accuracy
+    print(f"\n📈 Top-{top_k} Accuracy:")
+    topk_hits = 0
+    for i in range(len(y_test)):
+        probs = y_pred_proba[i]
+        topk_indices = np.argsort(probs)[-top_k:][::-1]
+        if y_test[i] in topk_indices:
+            topk_hits += 1
+    topk_acc = topk_hits / len(y_test)
+    print(f"   Top-{top_k}: {topk_acc:.4f} ({topk_acc*100:.2f}%)")
+    
+    # Cross-validation
+    print("\n" + "=" * 80)
+    print("CROSS-VALIDATION (5-Fold)")
+    print("=" * 80)
+    print("\n⏳ Running cross-validation...")
+    
+    cv_acc = cross_val_score(rf_model, X, y_encoded, cv=5, scoring='accuracy')
+    cv_prec = cross_val_score(rf_model, X, y_encoded, cv=5, scoring='precision_macro')
+    cv_rec = cross_val_score(rf_model, X, y_encoded, cv=5, scoring='recall_macro')
+    cv_f1 = cross_val_score(rf_model, X, y_encoded, cv=5, scoring='f1_macro')
+    
+    print(f"\n📊 Cross-Validation Results:")
+    print(f"   Accuracy:  {cv_acc.mean():.4f} (±{cv_acc.std():.4f})")
+    print(f"   Precision: {cv_prec.mean():.4f} (±{cv_prec.std():.4f})")
+    print(f"   Recall:    {cv_rec.mean():.4f} (±{cv_rec.std():.4f})")
+    print(f"   F1-Score:  {cv_f1.mean():.4f} (±{cv_f1.std():.4f})")
+    
+    # Confidence analysis
+    print("\n" + "=" * 80)
+    print("CONFIDENCE ANALYSIS")
+    print("=" * 80)
+    
+    max_probs = np.max(y_pred_proba, axis=1)
+    print(f"\n📊 Prediction Confidence:")
+    print(f"   Mean:   {max_probs.mean():.4f}")
+    print(f"   Median: {np.median(max_probs):.4f}")
+    print(f"   Min:    {max_probs.min():.4f}")
+    print(f"   Max:    {max_probs.max():.4f}")
+    print(f"   Std:    {max_probs.std():.4f}")
+    
+    # Confidence bins
+    bins = [0, 0.3, 0.5, 0.7, 0.9, 1.0]
+    labels_conf = ['Very Low (<0.3)', 'Low (0.3-0.5)', 'Medium (0.5-0.7)', 'High (0.7-0.9)', 'Very High (>0.9)']
+    confidence_bins = pd.cut(max_probs, bins=bins, labels=labels_conf)
+    
+    print(f"\n📊 Confidence Distribution:")
+    for label in labels_conf:
+        count = (confidence_bins == label).sum()
+        pct = count / len(max_probs) * 100
+        print(f"   {label:<20}: {count:>4} ({pct:>5.1f}%)")
+    
+    # Per-class report
+    report_dict = classification_report(
+        y_test_labels, y_pred_labels, zero_division=0, output_dict=True
+    )
+    
+    # Save results
     report = {
-        "n_samples": len(df),
-        "accuracy": float(acc),
-        "precision_macro": float(prec_macro),
-        "recall_macro": float(rec_macro),
-        "f1_macro": float(f1_macro),
-        "precision_micro": float(prec_micro),
-        "recall_micro": float(rec_micro),
-        "f1_micro": float(f1_micro),
-        "classification_report": classification_report(y_true, y_pred_labels, zero_division=0, output_dict=True)
+        "n_samples_total": len(sym_df),
+        "n_test_samples": len(X_test),
+        "test_set_metrics": {
+            "accuracy": float(acc),
+            "precision_macro": float(prec_macro),
+            "precision_weighted": float(prec_weighted),
+            "recall_macro": float(rec_macro),
+            "recall_weighted": float(rec_weighted),
+            "f1_macro": float(f1_macro),
+            "f1_weighted": float(f1_weighted),
+            f"top_{top_k}_accuracy": float(topk_acc)
+        },
+        "cross_validation_metrics": {
+            "accuracy_mean": float(cv_acc.mean()),
+            "accuracy_std": float(cv_acc.std()),
+            "precision_mean": float(cv_prec.mean()),
+            "precision_std": float(cv_prec.std()),
+            "recall_mean": float(cv_rec.mean()),
+            "recall_std": float(cv_rec.std()),
+            "f1_mean": float(cv_f1.mean()),
+            "f1_std": float(cv_f1.std())
+        },
+        "confidence_stats": {
+            "mean": float(max_probs.mean()),
+            "median": float(np.median(max_probs)),
+            "min": float(max_probs.min()),
+            "max": float(max_probs.max()),
+            "std": float(max_probs.std())
+        },
+        "classification_report": report_dict
     }
-
-    # Top-k accuracy if predict_proba available and label encoder present
-    if hasattr(clf, "predict_proba") and y_true_idx is not None:
-        try:
-            probs = clf.predict_proba(X)
-            topk_hits = 0
-            total = len(df)
-            for i in range(len(df)):
-                row = probs[i]
-                topk = np.argsort(row)[-top_k:][::-1]
-                if y_true_idx[i] in topk:
-                    topk_hits += 1
-            report[f"top_{top_k}_accuracy"] = float(topk_hits / total)
-        except Exception:
-            report[f"top_{top_k}_accuracy"] = None
-    else:
-        report[f"top_{top_k}_accuracy"] = None
-
-    # Save report
+    
     with open(out_json, "w", encoding="utf-8") as f:
         json.dump(report, f, indent=2)
-
-    # Print concise summary
-    print(f"Evaluated {report['n_samples']} samples")
-    print(f"Accuracy: {report['accuracy']:.4f}")
-    print(f"Precision (macro): {report['precision_macro']:.4f}")
-    print(f"Recall (macro): {report['recall_macro']:.4f}")
-    print(f"F1 (macro): {report['f1_macro']:.4f}")
-    if report.get(f"top_{top_k}_accuracy") is not None:
-        print(f"Top-{top_k} accuracy: {report[f'top_{top_k}_accuracy']:.4f}")
-    else:
-        print(f"Top-{top_k} accuracy: not available")
-    print(f"Saved full report to: {out_json}")
+    
+    print("\n" + "=" * 80)
+    print(f"✅ Evaluation complete! Results saved to: {out_json}")
+    print("=" * 80)
 
 
 if __name__ == "__main__":
     base = os.path.dirname(__file__)
     model_path = os.path.join(base, "disease_model.pkl")
-    cleaned_csv = os.path.join(base, "cleaned_disease_symptoms.csv")
+    dataset_csv = os.path.join(base, "DiseaseAndSymptoms.csv")
     out = os.path.join(base, "eval_report.json")
     try:
-        evaluate(model_path, cleaned_csv, out_json=out, top_k=3)
+        evaluate(model_path, dataset_csv, out_json=out, top_k=5)
     except Exception as e:
         print(f"Evaluation failed: {e}")
+        import traceback
+        traceback.print_exc()
         raise

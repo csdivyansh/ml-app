@@ -82,7 +82,12 @@ HIGH_RISK_DISEASES = {
     "anaphylaxis": "critical",
     "paralysis (brain hemorrhage)": "high",
     "dengue": "high",
-    "typhoid fever": "high"
+    "typhoid fever": "high",
+    "aids": "high",
+    "tuberculosis": "high",
+    "hepatitis b": "high",
+    "hepatitis c": "high",
+    "malaria": "high"
 }
 
 
