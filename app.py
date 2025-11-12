@@ -68,6 +68,24 @@ except Exception as e:
     prec_dict = {}
 
 
+# High-risk diseases requiring immediate emergency attention
+HIGH_RISK_DISEASES = {
+    "heart attack": "critical",
+    "stroke": "critical",
+    "myocardial infarction": "critical",
+    "severe asthma": "critical",
+    "pneumonia": "high",
+    "sepsis": "critical",
+    "pulmonary embolism": "critical",
+    "meningitis": "critical",
+    "seizure": "critical",
+    "anaphylaxis": "critical",
+    "paralysis (brain hemorrhage)": "high",
+    "dengue": "high",
+    "typhoid fever": "high"
+}
+
+
 # Define request schema
 class SymptomInput(BaseModel):
     """Schema for symptom data input"""
@@ -155,6 +173,47 @@ def encode_symptoms_binary(matched_symptoms: List[str]) -> np.ndarray:
     return np.array(binary_vector).reshape(1, -1)
 
 
+def get_urgency_flag(predicted_disease: str, confidence: float) -> Dict[str, Any]:
+    """
+    Determine urgency level based on disease type and confidence.
+    Prioritizes high-risk diseases over confidence scores.
+    
+    Args:
+        predicted_disease: The predicted disease name
+        confidence: Confidence score from model (0-1)
+        
+    Returns:
+        Dictionary with urgency level, score, reason, and recommended action
+    """
+    disease_lower = predicted_disease.lower().strip()
+    
+    # Check if it's a high-risk disease
+    if disease_lower in HIGH_RISK_DISEASES:
+        risk_level = HIGH_RISK_DISEASES[disease_lower]
+        return {
+            "level": risk_level,
+            "score": round(float(confidence), 3),
+            "reason": f"High-risk condition detected: {predicted_disease}",
+            "recommended_action": "Seek emergency medical care immediately" if risk_level == "critical" else "Consult a clinician promptly"
+        }
+    
+    # Otherwise use confidence-based urgency
+    if confidence > 0.7:
+        return {
+            "level": "medium",
+            "score": round(float(confidence), 3),
+            "reason": "Moderate confidence in prediction; clinical review advised",
+            "recommended_action": "Consult a clinician"
+        }
+    
+    return {
+        "level": "low",
+        "score": round(float(confidence), 3),
+        "reason": "Low confidence prediction; insufficient symptoms",
+        "recommended_action": None
+    }
+
+
 # Main prediction endpoint
 @app.post("/predict")
 async def predict_disease(input_data: SymptomInput):
@@ -221,24 +280,8 @@ async def predict_disease(input_data: SymptomInput):
         # Look up precautions
         precautions = prec_dict.get(predicted_disease.lower(), [])
         
-        # Urgency detection (red flags)
-        urgency_score, urgency_level, urgency_reason, recommended_action = 0.0, "low", "No immediate danger detected", None
-        try:
-            red_flags = {"loss_of_consciousness", "unconscious", "severe_headache", "sudden", "paralysis", "weakness", "chest_pain", "shortness_of_breath", "severe", "fainting"}
-            extracted_set = set(extracted_symptoms)
-            intersect = extracted_set.intersection(red_flags)
-            if intersect:
-                urgency_score = 0.95
-                urgency_level = "critical"
-                urgency_reason = f"Contains red-flag symptoms: {', '.join(intersect)}"
-                recommended_action = "Seek immediate emergency medical care (call emergency services)."
-            elif any(t for t in extracted_symptoms if "severe" in t or "high" in t):
-                urgency_score = 0.6
-                urgency_level = "high"
-                urgency_reason = "Symptoms indicate possible serious condition; clinical review advised"
-                recommended_action = "Consult a clinician promptly"
-        except Exception as e:
-            logger.warning("Error in urgency detection: %s", e)
+        # Get urgency flag based on disease type and confidence
+        urgency_flag = get_urgency_flag(predicted_disease, confidence if confidence else 0.0)
         
         result = {
             "predicted_disease": predicted_disease,
@@ -249,12 +292,7 @@ async def predict_disease(input_data: SymptomInput):
             "success": True,
             "message": "Prediction successful",
             "top_k": top_k_list,
-            "urgency_flag": {
-                "level": urgency_level,
-                "score": round(float(urgency_score), 3),
-                "reason": urgency_reason,
-                "recommended_action": recommended_action,
-            },
+            "urgency_flag": urgency_flag,
             "model_version": "RandomForest + Binary Encoding v2"
         }
         
